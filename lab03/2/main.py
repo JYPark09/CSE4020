@@ -34,7 +34,7 @@ REFLECT_MATRIX = np.array([[-1., 0., 0.], [0., -1., 0.], [0., 0., 1.]])
 def key_callback(window, key, scancode, action, mods):
     global g_composed_mat
 
-    if action == glfw.PRESS:
+    if action == glfw.PRESS or action == glfw.REPEAT:
         if key == glfw.KEY_W:
             g_composed_mat = SCALE_MATRIX @ g_composed_mat
         elif key == glfw.KEY_E:
