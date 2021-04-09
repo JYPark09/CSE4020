@@ -4,7 +4,7 @@ import glfw
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-VERBOSE = True
+VERBOSE = False
 GRID_SIZE = 2.5
 
 VIEWER_STATE = {
@@ -16,7 +16,7 @@ VIEWER_STATE = {
     },
 
     'cam': {
-        'speed': 0.1,
+        'speed': 0.8,
         'distance': 7.,
         'azimuth': np.pi/4.,
         'elevation': np.pi/4.,
@@ -26,51 +26,6 @@ VIEWER_STATE = {
         'up': np.array([0., 1., 0.]),
     }
 }
-
-
-class Mesh:
-    def __init__(self):
-        self.clear()
-
-    def add_vertex(self, pos):
-        if len(self.vertices) > 0:
-            assert len(pos) == len(self.vertices[0])
-
-        self.vertices.append(pos)
-
-    def add_face(self, face):
-        if len(self.indices) > 0:
-            assert len(face) == len(self.indices[0])
-
-        self.indices.append(face)
-
-    def build(self):
-        assert len(self.vertices) != 0 and len(self.indices) != 0
-
-        self.vertices = np.array(self.vertices, dtype=np.float32)
-        self.indices = np.array(self.indices, dtype=np.uint32)
-        self.colors = np.array(self.colors, dtype=np.uint32)
-
-        self.vertex_dim = len(self.vertices[0])
-        self.mode = GL_TRIANGLES if len(self.indices[0]) == 3 else GL_QUADS
-
-    def clear(self):
-        self.vertices = []
-        self.indices = []
-        self.colors = []
-
-        self.vertex_dim = 0
-        self.mode = None
-
-    def render(self):
-        vertex_dim = len(self.vertices[0])
-
-        glEnableClientState(GL_VERTEX_ARRAY)
-        glColorPointer(3, GL_UNSIGNED_BYTE, 0, self.colors)
-        glVertexPointer(self.vertex_dim, GL_FLOAT,
-                        self.vertex_dim * self.vertices.itemsize, self.vertices)
-        glDrawElements(self.mode, self.indices.size,
-                       GL_UNSIGNED_INT, self.indices)
 
 
 def verbose(*args, **kargs):
@@ -120,10 +75,10 @@ def render():
     glLoadIdentity()
 
     if VIEWER_STATE['projection']:
-        gluPerspective(45, 1, 3, 10+VIEWER_STATE['cam']['distance'])
+        gluPerspective(45, 1, .1, 1000.)
     else:
-        v = 3 * np.tan(np.pi/4 / 2)
-        glOrtho(-v, v, -v, v, 3, 10+VIEWER_STATE['cam']['distance'])
+        v = 6 * np.tan(np.pi/4 / 2)
+        glOrtho(-v, v, -v, v, -1000., 1000.)
 
     process_camera()
 
@@ -176,9 +131,9 @@ def cursor_pos_callback(window, xpos, ypos):
 
     if VIEWER_STATE['button']['orbit']:
         VIEWER_STATE['cam']['azimuth'] += np.radians(
-            diff_x * VIEWER_STATE['cam']['speed'] * VIEWER_STATE['cam']['distance'])
+            diff_x * VIEWER_STATE['cam']['speed'] * VIEWER_STATE['cam']['distance'] * 0.5)
         VIEWER_STATE['cam']['elevation'] += np.radians(
-            -diff_y * VIEWER_STATE['cam']['speed'] * VIEWER_STATE['cam']['distance'])
+            -diff_y * VIEWER_STATE['cam']['speed'] * VIEWER_STATE['cam']['distance'] * 0.5)
 
         verbose("azimuth: {}, elevation: {}".format(
             VIEWER_STATE['cam']['azimuth'], VIEWER_STATE['cam']['elevation']))
@@ -192,9 +147,9 @@ def cursor_pos_callback(window, xpos, ypos):
         vec_right = np.cross(up, vec_forward)
         vec_up = np.cross(vec_forward, vec_right)
 
-        vec_delta = diff_x * vec_right * \
-            VIEWER_STATE['cam']['speed'] + -diff_y * \
-            vec_up * VIEWER_STATE['cam']['speed']
+        vec_delta = -diff_x * vec_right * \
+            VIEWER_STATE['cam']['speed'] * 0.3 + diff_y * \
+            vec_up * VIEWER_STATE['cam']['speed'] * 0.3
 
         VIEWER_STATE['cam']['eye'] += vec_delta
         VIEWER_STATE['cam']['lookat'] += vec_delta
@@ -205,7 +160,7 @@ def cursor_pos_callback(window, xpos, ypos):
 
 def scroll_callback(window, xoffset, yoffset):
     VIEWER_STATE['cam']['distance'] += np.sign(
-        yoffset) * VIEWER_STATE['cam']['speed']
+        -yoffset) * VIEWER_STATE['cam']['speed']
 
     verbose('Changed VIEWER_STATE(cam.distance) to',
             VIEWER_STATE['cam']['distance'])
@@ -234,33 +189,13 @@ def main():
     glfw.set_key_callback(window, key_callback)
 
     glfw.make_context_current(window)
-
-    box_mesh = Mesh()
-
-    box_mesh.add_vertex((-1., 1., 1.))
-    box_mesh.add_vertex((1., 1., 1.))
-    box_mesh.add_vertex((1., -1., 1.))
-    box_mesh.add_vertex((-1., -1., 1.))
-    box_mesh.add_vertex((-1., 1., -1.))
-    box_mesh.add_vertex((1., 1., -1.))
-    box_mesh.add_vertex((1., -1., -1.))
-    box_mesh.add_vertex((-1., -1., -1.))
-
-    box_mesh.add_face((0, 1, 5, 4))
-    box_mesh.add_face((0, 3, 2, 1))
-    box_mesh.add_face((0, 4, 7, 3))
-    box_mesh.add_face((2, 3, 7, 6))
-    box_mesh.add_face((4, 5, 6, 7))
-    box_mesh.add_face((1, 2, 6, 5))
-
-    box_mesh.build()
+    glfw.swap_interval(1)
 
     # Main Loop
     while not glfw.window_should_close(window):
         glfw.poll_events()
 
         render()
-        box_mesh.render()
 
         glfw.swap_buffers(window)
 
