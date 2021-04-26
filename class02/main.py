@@ -4,6 +4,8 @@ import glfw
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
+from mesh import Mesh
+
 VERBOSE = False
 GRID_SIZE = 2.5
 
@@ -178,7 +180,7 @@ def main():
     if not glfw.init():
         raise Exception("GLFW initialization failed.")
 
-    window = glfw.create_window(680, 480, "Basic OpenGL Viewer", None, None)
+    window = glfw.create_window(680, 480, "Obj Viewer", None, None)
     if not window:
         glfw.terminate()
         raise Exception("Cannot create window.")
