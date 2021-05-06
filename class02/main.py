@@ -4,13 +4,14 @@ import glfw
 from OpenGL.GL import *
 from OpenGL.GLU import *
 
-from mesh import Mesh
+from mesh import ObjMeshLoader
 
 VERBOSE = False
 GRID_SIZE = 2.5
 
 VIEWER_STATE = {
     'projection': True,
+    'wireframe': False,
 
     'button': {
         'orbit': False,
@@ -26,7 +27,9 @@ VIEWER_STATE = {
         'eye': None,
         'lookat': np.array([0., 0., 0.]),
         'up': np.array([0., 1., 0.]),
-    }
+    },
+
+    'mesh': None
 }
 
 
@@ -74,17 +77,89 @@ def render():
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT)
     glEnable(GL_DEPTH_TEST)
 
-    glLoadIdentity()
+    if VIEWER_STATE['wireframe']:
+        glPolygonMode(GL_FRONT_AND_BACK, GL_LINE)
+    else:
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
 
+    glMatrixMode(GL_PROJECTION)
+    glLoadIdentity()
     if VIEWER_STATE['projection']:
         gluPerspective(45, 1, .1, 1000.)
     else:
         v = 6 * np.tan(np.pi/4 / 2)
         glOrtho(-v, v, -v, v, -1000., 1000.)
 
+    glMatrixMode(GL_MODELVIEW)
+    glLoadIdentity()
+
     process_camera()
 
+    # Render meshes
     draw_grid()
+
+    glEnable(GL_LIGHTING)
+    glEnable(GL_LIGHT0)
+    glEnable(GL_LIGHT1)
+    glEnable(GL_LIGHT2)
+
+    glEnable(GL_NORMALIZE)
+
+    '''
+    Setup Light 0
+    '''
+    glPushMatrix()
+
+    lightColor = (1., 0., 0., 1.)
+    ambientLightColor = (.1, .1, .1, 1.)
+    lightPos = (5., 5., 5., 1.)
+    glLightfv(GL_LIGHT0, GL_POSITION, lightPos)
+    glLightfv(GL_LIGHT0, GL_DIFFUSE, lightColor)
+    glLightfv(GL_LIGHT0, GL_SPECULAR, lightColor)
+    glLightfv(GL_LIGHT0, GL_AMBIENT, ambientLightColor)
+
+    glPopMatrix()
+
+    '''
+    Setup Light 1
+    '''
+    glPushMatrix()
+
+    lightColor = (0., 1., 0., 1.)
+    ambientLightColor = (.1, .1, .1, 1.)
+    lightPos = (-5., 5., 5., 1.)
+    glLightfv(GL_LIGHT1, GL_POSITION, lightPos)
+    glLightfv(GL_LIGHT1, GL_DIFFUSE, lightColor)
+    glLightfv(GL_LIGHT1, GL_SPECULAR, lightColor)
+    glLightfv(GL_LIGHT1, GL_AMBIENT, ambientLightColor)
+
+    glPopMatrix()
+
+    '''
+    Setup Light 2
+    '''
+    glPushMatrix()
+
+    lightColor = (0., 0., 1., 1.)
+    ambientLightColor = (.1, .1, .1, 1.)
+    lightPos = (0., 5., -5., 1.)
+    glLightfv(GL_LIGHT2, GL_POSITION, lightPos)
+    glLightfv(GL_LIGHT2, GL_DIFFUSE, lightColor)
+    glLightfv(GL_LIGHT2, GL_SPECULAR, lightColor)
+    glLightfv(GL_LIGHT2, GL_AMBIENT, ambientLightColor)
+
+    glPopMatrix()
+
+    objectColor = (1., 1., 1., 1.)
+    specularObjectColor = (1., 1., 1., 1.)
+    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, objectColor)
+    glMaterialfv(GL_FRONT, GL_SHININESS, 10)
+    glMaterialfv(GL_FRONT, GL_SPECULAR, specularObjectColor)
+
+    if VIEWER_STATE['mesh'] is not None:
+        VIEWER_STATE['mesh'].render()
+
+    glDisable(GL_LIGHTING)
 
 
 prev_cursor_xpos = 0
@@ -169,10 +244,28 @@ def scroll_callback(window, xoffset, yoffset):
 
 
 def key_callback(window, key, scancode, action, mods):
-    if key == glfw.KEY_V and action == glfw.PRESS:
-        VIEWER_STATE['projection'] = not VIEWER_STATE['projection']
-        verbose('Changed VIEWER_STATE(projection) to',
-                VIEWER_STATE['projection'])
+    if action == glfw.PRESS or action == glfw.REPEAT:
+        if key == glfw.KEY_V:
+            VIEWER_STATE['projection'] = not VIEWER_STATE['projection']
+            verbose('Changed VIEWER_STATE(projection) to',
+                    VIEWER_STATE['projection'])
+        elif key == glfw.KEY_Z:
+            VIEWER_STATE['wireframe'] = not VIEWER_STATE['wireframe']
+
+
+def drop_callback(window, cbfun):
+    fname = cbfun[0]
+
+    mesh = ObjMeshLoader.from_file(fname)
+
+    print('[Load OBJ]')
+    print('Filename: %s' % fname)
+    print('Total number of faces: %d' % mesh.n_faces)
+    print('Number of faces with 3 vertices: %d' % mesh.face_3)
+    print('Number of faces with 4 vertices: %d' % mesh.face_4)
+    print('Number of faces with more than 4 vertices: %d' % mesh.face_n)
+
+    VIEWER_STATE['mesh'] = mesh
 
 
 def main():
@@ -189,6 +282,7 @@ def main():
     glfw.set_cursor_pos_callback(window, cursor_pos_callback)
     glfw.set_scroll_callback(window, scroll_callback)
     glfw.set_key_callback(window, key_callback)
+    glfw.set_drop_callback(window, drop_callback)
 
     glfw.make_context_current(window)
     glfw.swap_interval(1)

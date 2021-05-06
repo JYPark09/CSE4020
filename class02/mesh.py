@@ -1,3 +1,4 @@
+import ctypes
 import numpy as np
 
 from OpenGL.GL import *
@@ -8,52 +9,63 @@ class Mesh:
         self.clear()
 
     def add_vertex(self, pos):
-        if len(self.vertices) > 0:
-            assert len(pos) == len(self.vertices[0])
-
+        assert len(pos) == 3
         self.vertices.append(pos)
 
     def add_normal(self, norm):
-        if len(self.normals) > 0:
-            assert len(norm) == len(self.normals[0])
-
+        assert len(norm) == 3
         self.normals.append(norm)
 
-    def add_face(self, face):
-        if len(self.indices) > 0:
-            assert len(face) == len(self.indices[0])
+    def add_face(self, face, uv, norm):
+        if len(face) == 3:
+            self.vindices.append(face)
+            self.nindices.append(norm)
+        else:
+            for i in range(1, len(face) - 1):
+                self.vindices.append([face[0], face[i], face[i+1]])
+                self.nindices.append([norm[0], norm[i], norm[i+1]])
 
-        self.indices.append(face)
+        self.n_faces += 1
+        if len(face) == 3:
+            self.face_3 += 1
+        elif len(face) == 4:
+            self.face_4 += 1
+        else:
+            self.face_n += 1
 
     def build(self):
-        assert len(self.vertices) != 0 and len(self.indices) != 0
+        assert len(self.vertices) != 0 and len(
+            self.vindices) != 0 and len(self.normals) != 0 and len(self.nindices) != 0
 
-        self.vertices = np.array(self.vertices, dtype=np.float32)
-        self.normals = np.array(self.normals, dtype=np.float32)
-        self.indices = np.array(self.indices, dtype=np.uint32)
-        self.colors = np.array(self.colors, dtype=np.uint32)
+        varr = []
+        for face in zip(self.vindices, self.nindices):
+            for vi, ni in zip(*face):
+                varr.append(self.normals[ni])
+                varr.append(self.vertices[vi])
 
-        self.vertex_dim = len(self.vertices[0])
-        self.mode = GL_TRIANGLES if len(self.indices[0]) == 3 else GL_QUADS
+        self.varr = np.array(varr, dtype=np.float32)
 
     def clear(self):
         self.vertices = []
-        self.indices = []
+        self.vindices = []
+        self.nindices = []
         self.normals = []
-        self.colors = []
 
-        self.vertex_dim = 0
-        self.mode = None
+        self.n_faces = 0
+        self.face_3 = 0
+        self.face_4 = 0
+        self.face_n = 0
 
     def render(self):
         glEnableClientState(GL_VERTEX_ARRAY)
         glEnableClientState(GL_NORMAL_ARRAY)
-        glColorPointer(3, GL_UNSIGNED_BYTE, 0, self.colors)
-        glVertexPointer(self.vertex_dim, GL_FLOAT,
-                        self.vertex_dim * self.vertices.itemsize, self.vertices)
-        glNormalPointer(GL_FLOAT, 3*self.normals.itemsize, self.normals)
-        glDrawElements(self.mode, self.indices.size,
-                       GL_UNSIGNED_INT, self.indices)
+
+        glNormalPointer(GL_FLOAT, 6 * self.varr.itemsize, self.varr)
+        glVertexPointer(3, GL_FLOAT, 6 * self.varr.itemsize, ctypes.c_void_p(self.varr.ctypes.data + 3*self.varr.itemsize))
+        glDrawArrays(GL_TRIANGLES, 0, self.varr.size // 6)
+
+        glDisableClientState(GL_NORMAL_ARRAY)
+        glDisableClientState(GL_VERTEX_ARRAY)
 
 
 class ObjMeshLoader:
@@ -76,10 +88,26 @@ class ObjMeshLoader:
             cmd, *args = line.split()
 
             if cmd == 'v':  # vertex
-                mesh.add_vertex(args)
+                mesh.add_vertex(list(map(float, args)))
             elif cmd == 'vn':  # normal
-                mesh.add_normal(args)
-            elif cmd == 'f': # face
-                pass
+                mesh.add_normal(list(map(float, args)))
+            elif cmd == 'f':  # face
+                face = []
+                uv = []
+                norm = []
+
+                for arg in args:
+                    fun = arg.split('/')
+                    assert len(fun) == 3
+
+                    f, u, n = fun
+
+                    face.append(int(f) - 1)  # obj use 1-based index
+                    uv.append(int(u) - 1 if len(u) > 0 else 0)
+                    norm.append(int(n) - 1 if len(n) > 0 else 0)
+
+                mesh.add_face(face, uv, norm)
+
+        mesh.build()
 
         return mesh
