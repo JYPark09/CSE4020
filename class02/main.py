@@ -12,6 +12,7 @@ GRID_SIZE = 2.5
 VIEWER_STATE = {
     'projection': True,
     'wireframe': False,
+    'force_smooth': False,
 
     'button': {
         'orbit': False,
@@ -251,12 +252,15 @@ def key_callback(window, key, scancode, action, mods):
                     VIEWER_STATE['projection'])
         elif key == glfw.KEY_Z:
             VIEWER_STATE['wireframe'] = not VIEWER_STATE['wireframe']
-
+        elif key == glfw.KEY_S:
+            VIEWER_STATE['force_smooth'] = not VIEWER_STATE['force_smooth']
+            if VIEWER_STATE['mesh'] is not None:
+                VIEWER_STATE['mesh'].build(force_smooth=VIEWER_STATE['force_smooth'])
 
 def drop_callback(window, cbfun):
     fname = cbfun[0]
 
-    mesh = ObjMeshLoader.from_file(fname)
+    mesh = ObjMeshLoader.from_file(fname, force_smooth=VIEWER_STATE['force_smooth'])
 
     print('[Load OBJ]')
     print('Filename: %s' % fname)

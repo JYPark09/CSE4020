@@ -33,15 +33,39 @@ class Mesh:
         else:
             self.face_n += 1
 
-    def build(self):
+    def build(self, **kargs):
         assert len(self.vertices) != 0 and len(
             self.vindices) != 0 and len(self.normals) != 0 and len(self.nindices) != 0
 
         varr = []
-        for face in zip(self.vindices, self.nindices):
-            for vi, ni in zip(*face):
-                varr.append(self.normals[ni])
-                varr.append(self.vertices[vi])
+
+        if 'force_smooth' in kargs and kargs['force_smooth']:
+            normals = [[] for _ in range(len(self.vertices))]
+
+            for face in self.vindices:
+                v = np.array([self.vertices[f] for f in face])
+                v1 = v[1] - v[0]
+                v2 = v[2] - v[0]
+
+                normal = np.cross(v1, v2)
+                normal = normal / np.linalg.norm(normal)
+
+                for f in face:
+                    normals[f].append(normal)
+
+            for i, norms in enumerate(normals):
+                normals[i] = np.sum(np.array(norms), axis=0)
+                normals[i] /= np.linalg.norm(normals[i])
+
+            for face in self.vindices:
+                for i in face:
+                    varr.append(normals[i])
+                    varr.append(self.vertices[i])
+        else:
+            for face in zip(self.vindices, self.nindices):
+                for vi, ni in zip(*face):
+                    varr.append(self.normals[ni])
+                    varr.append(self.vertices[vi])
 
         self.varr = np.array(varr, dtype=np.float32)
 
@@ -70,12 +94,12 @@ class Mesh:
 
 class ObjMeshLoader:
     @staticmethod
-    def from_file(filename):
+    def from_file(filename, **kargs):
         with open(filename, 'rt') as f:
-            return ObjMeshLoader.load(f.read())
+            return ObjMeshLoader.load(f.read(), **kargs)
 
     @staticmethod
-    def load(obj):
+    def load(obj, **kargs):
         mesh = Mesh()
 
         for line in obj.split('\n'):
@@ -108,6 +132,6 @@ class ObjMeshLoader:
 
                 mesh.add_face(face, uv, norm)
 
-        mesh.build()
+        mesh.build(**kargs)
 
         return mesh
