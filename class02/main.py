@@ -5,6 +5,7 @@ from OpenGL.GL import *
 from OpenGL.GLU import *
 
 from mesh import ObjMeshLoader
+from animated import AnimatedMesh
 
 VERBOSE = False
 GRID_SIZE = 2.5
@@ -13,6 +14,7 @@ VIEWER_STATE = {
     'projection': True,
     'wireframe': False,
     'force_smooth': False,
+    'animation': False,
 
     'button': {
         'orbit': False,
@@ -30,6 +32,7 @@ VIEWER_STATE = {
         'up': np.array([0., 1., 0.]),
     },
 
+    'mesh_cache': None,
     'mesh': None
 }
 
@@ -151,13 +154,8 @@ def render():
 
     glPopMatrix()
 
-    objectColor = (1., 1., 1., 1.)
-    specularObjectColor = (1., 1., 1., 1.)
-    glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, objectColor)
-    glMaterialfv(GL_FRONT, GL_SHININESS, 10)
-    glMaterialfv(GL_FRONT, GL_SPECULAR, specularObjectColor)
-
     if VIEWER_STATE['mesh'] is not None:
+        VIEWER_STATE['mesh'].update(glfw.get_time())
         VIEWER_STATE['mesh'].render()
 
     glDisable(GL_LIGHTING)
@@ -256,6 +254,13 @@ def key_callback(window, key, scancode, action, mods):
             VIEWER_STATE['force_smooth'] = not VIEWER_STATE['force_smooth']
             if VIEWER_STATE['mesh'] is not None:
                 VIEWER_STATE['mesh'].build(force_smooth=VIEWER_STATE['force_smooth'])
+        elif key == glfw.KEY_H:
+            VIEWER_STATE['animation'] = not VIEWER_STATE['animation']
+
+            if VIEWER_STATE['animation']:
+                VIEWER_STATE['mesh'] = AnimatedMesh()
+            else:
+                VIEWER_STATE['mesh'] = VIEWER_STATE['mesh_cache']
 
 def drop_callback(window, cbfun):
     fname = cbfun[0]
@@ -269,7 +274,10 @@ def drop_callback(window, cbfun):
     print('Number of faces with 4 vertices: %d' % mesh.face_4)
     print('Number of faces with more than 4 vertices: %d' % mesh.face_n)
 
-    VIEWER_STATE['mesh'] = mesh
+    VIEWER_STATE['mesh_cache'] = mesh
+
+    if not VIEWER_STATE['animation']:
+        VIEWER_STATE['mesh'] = mesh
 
 
 def main():

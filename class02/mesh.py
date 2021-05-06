@@ -4,9 +4,32 @@ import numpy as np
 from OpenGL.GL import *
 
 
+class Transform:
+    def __init__(self):
+        self.translate = np.zeros(3)
+        self.rotation = np.zeros(3)
+        self.scale = np.ones(3)
+
+    def update(self):
+        glScalef(*self.scale)
+
+        glRotatef(self.rotation[2], 1, 0, 0)
+        glRotatef(self.rotation[1], 0, 1, 0)
+        glRotatef(self.rotation[0], 0, 0, 1)
+
+        glTranslatef(*self.translate)
+
+
 class Mesh:
     def __init__(self):
         self.clear()
+
+        self.diffuse = np.array([1., 1., 1., 1.])
+
+        self.local_trans = Transform()
+
+        self.children = []
+        self.built = False
 
     def add_vertex(self, pos):
         assert len(pos) == 3
@@ -19,11 +42,13 @@ class Mesh:
     def add_face(self, face, uv, norm):
         if len(face) == 3:
             self.vindices.append(face)
-            self.nindices.append(norm)
+            if len(norm) != 0:
+                self.nindices.append(norm)
         else:
             for i in range(1, len(face) - 1):
                 self.vindices.append([face[0], face[i], face[i+1]])
-                self.nindices.append([norm[0], norm[i], norm[i+1]])
+                if len(norm) != 0:
+                    self.nindices.append([norm[0], norm[i], norm[i+1]])
 
         self.n_faces += 1
         if len(face) == 3:
@@ -34,12 +59,12 @@ class Mesh:
             self.face_n += 1
 
     def build(self, **kargs):
-        assert len(self.vertices) != 0 and len(
-            self.vindices) != 0 and len(self.normals) != 0 and len(self.nindices) != 0
+        if len(self.vertices) == 0 or len(self.vindices) == 0:
+            return
 
         varr = []
 
-        if 'force_smooth' in kargs and kargs['force_smooth']:
+        if len(self.nindices) == 0 or ('force_smooth' in kargs and kargs['force_smooth']):
             normals = [[] for _ in range(len(self.vertices))]
 
             for face in self.vindices:
@@ -69,6 +94,8 @@ class Mesh:
 
         self.varr = np.array(varr, dtype=np.float32)
 
+        self.built = True
+
     def clear(self):
         self.vertices = []
         self.vindices = []
@@ -80,16 +107,35 @@ class Mesh:
         self.face_4 = 0
         self.face_n = 0
 
+    def update(self, uptime):
+        for child in self.children:
+            child.update(uptime)
+
     def render(self):
-        glEnableClientState(GL_VERTEX_ARRAY)
-        glEnableClientState(GL_NORMAL_ARRAY)
+        glMaterialfv(GL_FRONT, GL_AMBIENT_AND_DIFFUSE, self.diffuse)
+        glMaterialfv(GL_FRONT, GL_SHININESS, 10)
+        glMaterialfv(GL_FRONT, GL_SPECULAR, (1., 1., 1., 1.))
 
-        glNormalPointer(GL_FLOAT, 6 * self.varr.itemsize, self.varr)
-        glVertexPointer(3, GL_FLOAT, 6 * self.varr.itemsize, ctypes.c_void_p(self.varr.ctypes.data + 3*self.varr.itemsize))
-        glDrawArrays(GL_TRIANGLES, 0, self.varr.size // 6)
+        glPushMatrix()
 
-        glDisableClientState(GL_NORMAL_ARRAY)
-        glDisableClientState(GL_VERTEX_ARRAY)
+        self.local_trans.update()
+
+        if self.built:
+            glEnableClientState(GL_VERTEX_ARRAY)
+            glEnableClientState(GL_NORMAL_ARRAY)
+
+            glNormalPointer(GL_FLOAT, 6 * self.varr.itemsize, self.varr)
+            glVertexPointer(3, GL_FLOAT, 6 * self.varr.itemsize,
+                            ctypes.c_void_p(self.varr.ctypes.data + 3*self.varr.itemsize))
+            glDrawArrays(GL_TRIANGLES, 0, self.varr.size // 6)
+
+            glDisableClientState(GL_NORMAL_ARRAY)
+            glDisableClientState(GL_VERTEX_ARRAY)
+
+        for child in self.children:
+            child.render()
+
+        glPopMatrix()
 
 
 class ObjMeshLoader:
@@ -99,9 +145,20 @@ class ObjMeshLoader:
             return ObjMeshLoader.load(f.read(), **kargs)
 
     @staticmethod
+    def from_file_noret(filename, mesh, **kargs):
+        with open(filename, 'rt') as f:
+            ObjMeshLoader.load_noret(f.read(), mesh, **kargs)
+
+    @staticmethod
     def load(obj, **kargs):
         mesh = Mesh()
 
+        ObjMeshLoader.load_noret(obj, mesh, **kargs)
+
+        return mesh
+
+    @staticmethod
+    def load_noret(obj, mesh, **kargs):
         for line in obj.split('\n'):
             line = line.strip()
 
@@ -122,16 +179,15 @@ class ObjMeshLoader:
 
                 for arg in args:
                     fun = arg.split('/')
-                    assert len(fun) == 3
 
-                    f, u, n = fun
-
-                    face.append(int(f) - 1)  # obj use 1-based index
-                    uv.append(int(u) - 1 if len(u) > 0 else 0)
-                    norm.append(int(n) - 1 if len(n) > 0 else 0)
+                    if len(fun) >= 1:
+                        face.append(int(fun[0]) - 1)
+                    if len(fun) >= 3:
+                        uv.append(int(fun[1]) - 1 if len(fun[1]) > 0 else 0)
+                        norm.append(int(fun[2]) - 1 if len(fun[2]) > 0 else 0)
+                    if len(fun) == 2:
+                        norm.append(int(fun[1]) - 1 if len(fun[1]) > 0 else 0)
 
                 mesh.add_face(face, uv, norm)
 
         mesh.build(**kargs)
-
-        return mesh
