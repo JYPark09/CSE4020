@@ -12,7 +12,15 @@ def Lerp(t, q0, q1):
     return t * q0 + (1 - t) * q1
 
 def draw_curve(t, pointlist):
-    pass
+    if len(pointlist) == 1:
+        glVertex2fv(pointlist[0])
+        return
+
+    new_list = []
+    for i in range(len(pointlist) - 1):
+        new_list.append(Lerp(t, pointlist[i], pointlist[i+1]))
+
+    draw_curve(t, new_list)
 
 def render():
     global p0, p1
@@ -28,6 +36,10 @@ def render():
     glLoadIdentity()
 
     glColor3ub(255, 255, 255)
+    glBegin(GL_LINE_STRIP)
+    for t in np.arange(0, 1, .01):
+        draw_curve(t, [p0, p1, p2, p3])
+    glEnd()
 
     glPointSize(20.)
     glColor3ub(0, 255, 0)
