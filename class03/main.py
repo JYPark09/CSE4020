@@ -1,5 +1,6 @@
 from enum import Enum
 import numpy as np
+import os
 
 import glfw
 from OpenGL.GL import *
@@ -11,13 +12,115 @@ class BVHParserState(Enum):
     MOTION = 2
 
 class BVHNode:
-    def __init__(self):
-        self.offset = np.zeros(3)
+    def __init__(self, name, is_end=False):
+        self.name = name
+        self.is_end = is_end
 
+        self.offset = np.zeros(3)
+        self.channels = []
+        self.frames = []
+
+        self.children = []
 
 class BVH:
     def __init__(self):
-        self.channels = []
+        self.root = BVHNode('ROOT')
+
+        self.joints = []
+        self.num_of_frames = 0
+        self.fps = 0
+
+    def __repr__(self):
+        def _make_str(level, msg):
+            return '  ' * level + msg + os.linesep
+
+        result = ''
+
+        node_stack = [(self.root, 0)]
+
+        while node_stack:
+            node, level = node_stack[-1]
+            node_stack.pop()
+
+            result += _make_str(level, '<{}>'.format(node.name))
+            result += _make_str(level, 'offset: ' + str(node.offset))
+            result += _make_str(level, 'is endpoint: {}'.format(node.is_end))
+
+            if not node.is_end:
+                result += _make_str(level, 'first frame: ' + str(node.frames[0]))
+                result += _make_str(level, 'last frame: ' + str(node.frames[-1]))
+
+                for c in node.children:
+                    node_stack.append((c, level+1))
+
+        return result
+
+
+def parse_bvh(lines):
+    state = BVHParserState.NONE
+
+    bvh = BVH()
+    cur_node = None
+    node_stack = [bvh.root]
+
+    tot_num_of_channels = 0
+    channels = []
+    frames = []
+
+    for line in lines:
+        line = line.strip()
+        key, *args = line.split()
+        key = key.upper()
+
+        if key == 'HIERARCHY':
+            state = BVHParserState.HIERARCHY
+            continue
+        elif key == 'MOTION':
+            state = BVHParserState.MOTION
+            continue
+
+        if state == BVHParserState.HIERARCHY:
+            if key == 'JOINT' or key == 'ROOT':
+                bvh.joints.append(args[0])
+
+            if key == '{':
+                node_stack.append(cur_node)
+            elif key == '}':
+                node_stack.pop()
+            elif key == 'ROOT':
+                cur_node = bvh.root
+                cur_node.name = args[0]
+            elif key == 'JOINT':
+                cur_node = BVHNode(args[0], False)
+                node_stack[-1].children.append(cur_node)
+            elif key == 'END':
+                cur_node = BVHNode(args[0], True)
+                node_stack[-1].children.append(cur_node)
+            elif key == 'OFFSET':
+                cur_node.offset = np.fromiter(map(float, args), dtype=float)
+            elif key == 'CHANNELS':
+                cur_node.channels.extend(list(map(lambda x: x.upper(), args[1:])))
+                channels.append([cur_node, int(args[0])])
+                tot_num_of_channels += int(args[0])
+
+        elif state == BVHParserState.MOTION:
+            if line.upper().startswith('FRAMES:'):
+                bvh.num_of_frames = int(args[-1])
+            elif line.upper().startswith('FRAME TIME:'):
+                bvh.fps = 1 / float(args[-1])
+            else:
+                frames.append(np.fromiter(map(float, line.split()), dtype=float))
+
+    # build frames
+    print(tot_num_of_channels)
+    for frame_idx in range(bvh.num_of_frames):
+        ch_idx = 0
+
+        for node, cnt in channels:
+            node.frames.append(frames[frame_idx][ch_idx:ch_idx+cnt])
+            ch_idx += cnt
+
+    return bvh
 
 '''
 *******************************
@@ -194,30 +297,21 @@ def key_callback(window, key, scancode, action, mods):
         VIEWER_STATE['projection'] = not VIEWER_STATE['projection']
         verbose('Changed VIEWER_STATE(projection) to',
                 VIEWER_STATE['projection'])
-
-
-def parse_bvh(lines):
-    state = BVHParserState.NONE
-
-    
-
-    for line in lines:
-        line = line.strip().upper()
-
-        if line == 'HIERARCHY':
-            state = BVHParserState.HIERARCHY
-            continue
-        elif line == 'MOTION':
-            state = BVHParserState.MOTION
-            continue
-
         
 
 def drop_callback(window, cbfun):
     fname = cbfun[0]
 
     with open(fname, 'rt') as f:
-        VIEWER_STATE['bvh'] = parse_bvh(f.readlines())
+        bvh = VIEWER_STATE['bvh'] = parse_bvh(f.readlines())
+
+    print('[Open BVH]')
+    print('File name:', fname)
+    print('Num of frames:', bvh.num_of_frames)
+    print('FPS:', bvh.fps)
+    print('Num of joints:', len(bvh.joints))
+    print('Joint list:', ', '.join(bvh.joints))
+    print(flush=True)
 
 
 def main():
