@@ -12,8 +12,9 @@ class BVHParserState(Enum):
     MOTION = 2
 
 class BVHNode:
-    def __init__(self, name, is_end=False):
+    def __init__(self, name, parent=None, is_end=False):
         self.name = name
+        self.parent = parent
         self.is_end = is_end
 
         self.offset = np.zeros(3)
@@ -22,6 +23,21 @@ class BVHNode:
 
         self.children = []
 
+    def render(self, frame):
+        glPushMatrix()
+        glTranslatef(*self.offset)
+
+        glBegin(GL_LINES)
+        glVertex3fv(np.zeros(3))
+        glVertex3fv(-self.offset)
+        glEnd()
+
+        if not self.is_end:
+            for c in self.children:
+                c.render(frame)
+
+        glPopMatrix()
+
 class BVH:
     def __init__(self):
         self.root = BVHNode('ROOT')
@@ -29,6 +45,9 @@ class BVH:
         self.joints = []
         self.num_of_frames = 0
         self.fps = 0
+
+    def render(self, frame=-1):
+        self.root.render(frame)
 
     def __repr__(self):
         def _make_str(level, msg):
@@ -44,6 +63,7 @@ class BVH:
 
             result += _make_str(level, '<{}>'.format(node.name))
             result += _make_str(level, 'offset: ' + str(node.offset))
+            result += _make_str(level, 'channel: ' + ', '.join(node.channels))
             result += _make_str(level, 'is endpoint: {}'.format(node.is_end))
 
             if not node.is_end:
@@ -91,7 +111,7 @@ def parse_bvh(lines):
                 cur_node = bvh.root
                 cur_node.name = args[0]
             elif key == 'JOINT':
-                cur_node = BVHNode(args[0], False)
+                cur_node = BVHNode(args[0], node_stack[-1], False)
                 node_stack[-1].children.append(cur_node)
             elif key == 'END':
                 cur_node = BVHNode(args[0], True)
@@ -209,6 +229,9 @@ def render():
     process_camera()
 
     draw_grid()
+
+    if VIEWER_STATE['bvh'] is not None:
+        VIEWER_STATE['bvh'].render()
 
 
 prev_cursor_xpos = 0
