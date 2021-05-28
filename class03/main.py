@@ -1,8 +1,23 @@
+from enum import Enum
 import numpy as np
 
 import glfw
 from OpenGL.GL import *
 from OpenGL.GLU import *
+
+class BVHParserState(Enum):
+    NONE = 0,
+    HIERARCHY = 1,
+    MOTION = 2
+
+class BVHNode:
+    def __init__(self):
+        self.offset = np.zeros(3)
+
+
+class BVH:
+    def __init__(self):
+        self.channels = []
 
 '''
 *******************************
@@ -181,8 +196,28 @@ def key_callback(window, key, scancode, action, mods):
                 VIEWER_STATE['projection'])
 
 
+def parse_bvh(lines):
+    state = BVHParserState.NONE
+
+    
+
+    for line in lines:
+        line = line.strip().upper()
+
+        if line == 'HIERARCHY':
+            state = BVHParserState.HIERARCHY
+            continue
+        elif line == 'MOTION':
+            state = BVHParserState.MOTION
+            continue
+
+        
+
 def drop_callback(window, cbfun):
     fname = cbfun[0]
+
+    with open(fname, 'rt') as f:
+        VIEWER_STATE['bvh'] = parse_bvh(f.readlines())
 
 
 def main():
